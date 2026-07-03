@@ -1,25 +1,28 @@
-FROM php:8.3-alpine
+FROM serversideup/php:8.5-frankenphp
 
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+# Install Node.js 22.x
+USER root
+RUN apt-get update && apt-get install -y curl \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+USER www-data
 
-RUN install-php-extensions pcntl sockets exif sqlite3
+# Copy root composer files
+COPY --chown=www-data:www-data composer.json composer.lock ./
 
-RUN apk add npm
+# Install dependencies (Composer will successfully link your modules now)
+RUN composer install --no-dev --no-autoloader --no-scripts
 
-COPY . /var/www
+# COPY NPM DEPENDENCY FILES & INSTALL
+COPY --chown=www-data:www-data package.json package-lock.json* ./
+RUN npm ci
 
-WORKDIR /var/www
+# Copy the rest of the application source code
+COPY --chown=www-data:www-data . .
 
-RUN wget -O /usr/local/bin/frankenphp https://github.com/dunglas/frankenphp/releases/download/v1.1.0/frankenphp-linux-x86_64 && chmod +x /usr/local/bin/frankenphp
+# RUN NPM BUILD
+RUN npm run build
 
-RUN composer install --optimize-autoloader --no-dev
-
-RUN php artisan route:cache && \
-    php artisan view:cache
-
-RUN npm install pnpm -g && \
-    pnpm install && \
-    pnpm build
-
-ENTRYPOINT ["php", "artisan", "octane:start", "--server=frankenphp", "--workers=4", "--port=8080", "--host=0.0.0.0", "--admin-port=2019"]
+# Finalize autoloader and run framework post-install tasks
+RUN composer dump-autoload --no-dev --classmap-authoritative
