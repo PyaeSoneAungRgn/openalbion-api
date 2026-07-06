@@ -1,4 +1,4 @@
-FROM serversideup/php:8.3-fpm
+FROM serversideup/php:8.3-fpm-nginx
 
 # Install Node.js 22.x
 USER root
