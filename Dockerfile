@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y curl \
 # Install required PHP extensions
 RUN install-php-extensions pcntl sockets exif sqlite3
 
+# FIX: Redirect Nginx logs to process 1 to bypass Vercel's /dev/stderr permission denied error
+RUN ln -sf /proc/1/fd/2 /var/log/nginx/error.log \
+    && ln -sf /proc/1/fd/1 /var/log/nginx/access.log
+
 USER www-data
 
 # Copy root composer files
