@@ -34,3 +34,8 @@ RUN npm run build
 
 # Finalize autoloader and run framework post-install tasks
 RUN composer dump-autoload --no-dev --classmap-authoritative
+
+# FIX: Explicitly configure the entrypoint scripts to listen on port 8080 while remaining as user www-data
+ENV MIXED_PORT=8080
+ENV HTTP_PORT=8080
+EXPOSE 8080
