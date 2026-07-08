@@ -11,29 +11,34 @@ RUN apt-get update && apt-get install -y curl \
 # Install required PHP extensions
 RUN install-php-extensions pcntl sockets exif sqlite3
 
-# FIX: Redirect Nginx logs to process 1 to bypass Vercel's /dev/stderr permission denied error
+# FIX: Create symlinks for Nginx logs pointing to PID 1's stdout/stderr
 RUN ln -sf /proc/1/fd/2 /var/log/nginx/error.log \
     && ln -sf /proc/1/fd/1 /var/log/nginx/access.log
 
-# Make Nginx actually listen on port 80 instead of the image's default 8080.
-# The listen port is baked into this template (not env-var driven), so we patch it directly.
-RUN sed -i 's/listen 8080/listen 80/; s/listen \[::\]:8080/listen [::]:80/' \
-    /etc/nginx/site-opts.d/http.conf.template
+# FIX: The base image templates reference /dev/stderr and /dev/stdout directly.
+# Vercel's sandbox blocks those paths, so we rewrite the templates to use the
+# symlinks above before the init script processes them.
+RUN for f in /etc/nginx/nginx.conf.template \
+             /etc/nginx/site-opts.d/http.conf.template \
+             /etc/nginx/site-opts.d/https.conf.template \
+             /etc/nginx/sites-available/ssl-full.template; do \
+    [ -f "$f" ] && sed -i \
+        -e 's|/dev/stderr|/var/log/nginx/error.log|g' \
+        -e 's|/dev/stdout|/var/log/nginx/access.log|g' \
+        "$f"; \
+done
 
-# Since the container still runs as the unprivileged www-data user, grant the
-# Nginx binary permission to bind to ports <1024 without needing root.
-RUN apt-get update && apt-get install -y libcap2-bin \
-    && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \
-    && apt-get purge -y libcap2-bin && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-EXPOSE 80
+# IMPORTANT: Do NOT change the listen port to 80. Vercel forwards to the port
+# defined by the PORT environment variable (default 8080). The base image
+# already listens on 8080, which is correct. Leave it alone.
+EXPOSE 8080
 
 USER www-data
 
 # Copy root composer files
 COPY --chown=www-data:www-data composer.json composer.lock ./
 
-# Install dependencies (Composer will successfully link your modules now)
+# Install dependencies
 RUN composer install --no-dev --no-autoloader --no-scripts
 
 # COPY NPM DEPENDENCY FILES & INSTALL
