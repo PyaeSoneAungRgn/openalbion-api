@@ -6,13 +6,15 @@ USER root
 RUN apt-get update && apt-get install -y \
     curl \
     libsqlite3-dev \
+    libzip-dev \
+    unzip \
     pkg-config \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions (now that build deps are present)
-RUN docker-php-ext-install pcntl sockets exif pdo_sqlite
+# Install PHP extensions
+RUN docker-php-ext-install pcntl sockets exif pdo_sqlite zip
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -35,7 +37,6 @@ RUN npm run build
 
 # Finalize autoloader + optimize
 RUN composer dump-autoload --no-dev --classmap-authoritative
-RUN php artisan optimize
 
 EXPOSE 8080
 
