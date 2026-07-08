@@ -2,13 +2,16 @@ FROM php:8.3-cli
 
 USER root
 
-# Install Node.js 22.x
-RUN apt-get update && apt-get install -y curl \
+# Install system deps + Node.js
+RUN apt-get update && apt-get install -y \
+    curl \
+    libsqlite3-dev \
+    pkg-config \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
+# Install PHP extensions (now that build deps are present)
 RUN docker-php-ext-install pcntl sockets exif pdo_sqlite
 
 # Install Composer
@@ -30,15 +33,13 @@ COPY --chown=www-data:www-data . .
 # Build assets
 RUN npm run build
 
-# Finalize autoloader
+# Finalize autoloader + optimize
 RUN composer dump-autoload --no-dev --classmap-authoritative
-
-# Laravel optimizations
 RUN php artisan optimize
 
 EXPOSE 8080
 
 USER www-data
 
-# Start Laravel's built-in server on 0.0.0.0 using Vercel's PORT
+# Start Laravel's built-in server on Vercel's PORT
 CMD ["sh", "-c", "php artisan serve --host=0.0.0.0 --port=${PORT:-8080}"]
